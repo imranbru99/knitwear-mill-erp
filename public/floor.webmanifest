@@ -1,0 +1,8 @@
+{
+  "name": "Knit floor",
+  "short_name": "Floor",
+  "start_url": "/floor/knit",
+  "display": "standalone",
+  "background_color": "#f3ecdf",
+  "theme_color": "#1e4642"
+}

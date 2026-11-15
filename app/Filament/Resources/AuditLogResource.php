@@ -1,0 +1,114 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\AuditLog\Pages\ManageAuditLog;
+use App\Models\AuditLog;
+use App\Support\Modules\ModuleRegistry;
+use Filament\Actions\Action;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Table;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+class AuditLogResource extends Resource
+{
+    protected static ?string $model = AuditLog::class;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'Foundation';
+
+    protected static ?string $moduleKey = 'foundation';
+
+    public static function canViewAny(): bool
+    {
+        if (static::$moduleKey && ! app(ModuleRegistry::class)->enabled(static::$moduleKey)) {
+            return false;
+        }
+
+        return parent::canViewAny();
+    }
+
+    public static function canCreate(): bool
+    {
+        return false && parent::canCreate();
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema->components([
+                Select::make('user_id')->relationship('user', 'name')->searchable()->preload(),
+                TextInput::make('auditable_type')->required(),
+                TextInput::make('auditable_id')->numeric()->required(),
+                TextInput::make('event')->required(),
+                Textarea::make('before')->columnSpanFull(),
+                Textarea::make('after')->columnSpanFull(),
+                Hidden::make('lock_version'),
+                Select::make('branch_id')->relationship('branch', 'name')->searchable()->preload(),
+            ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('user_id'),
+                TextColumn::make('auditable_type')->searchable(),
+                TextColumn::make('auditable_id'),
+                TextColumn::make('event')->searchable(),
+                TextColumn::make('branch.name')->label('Branch'),
+            ])
+            ->filters([
+                
+            ])
+            ->recordActions([
+                
+            ])
+            ->headerActions([
+                Action::make('exportCsv')->label('Export CSV')->action(function (): StreamedResponse {
+                    $filename = 'audit_logs.csv';
+
+                    return response()->streamDownload(function (): void {
+                        $handle = fopen('php://output', 'w');
+                        $first = AuditLog::query()->first();
+                        if (! $first) {
+                            fclose($handle);
+
+                            return;
+                        }
+                        fputcsv($handle, array_keys($first->getAttributes()));
+                        AuditLog::query()->orderByDesc('id')->limit(5000)->chunk(200, function ($rows) use ($handle): void {
+                            foreach ($rows as $row) {
+                                fputcsv($handle, $row->getAttributes());
+                            }
+                        });
+                        fclose($handle);
+                    }, $filename);
+                }),
+            ])
+            ->defaultSort('id', 'desc');
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ManageAuditLog::route('/'),
+        ];
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return [];
+    }
+}
